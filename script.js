@@ -10,6 +10,7 @@ class Workout {
     this.coords = coords;
     this.distance = distance;
     this.duration = duration;
+    this.clicks = 0;
 
   }
   _setDescription() {
@@ -17,6 +18,9 @@ class Workout {
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
    
     this.description = `${this.type[0].toUpperCase()}${this.type.slice(1)} on ${months[this.date.getMonth()]} ${this.date.getDate()}`;
+  }
+  click() {
+    this.clicks++
   }
 }
 class Running extends Workout {
@@ -47,7 +51,7 @@ class Cycling extends Workout {
 }
 const run1 = new Running([39, -12], 5.2, 24, 178);
 const cycling1 = new Cycling([39, -12], 27, 95, 523);
-console.log(run1, cycling1);
+// console.log(run1, cycling1);
 // console.log(new Date());
 // console.log((new Date() + '').slice(-10));
 
@@ -62,11 +66,20 @@ class App {
   #map;
   #mapEvent;
   #workout = [];
+  #mapZoomLevel = 13;
+
   constructor() {
+    // get users position
     this._getPosition();
+
+    // get data from local storage
+    this._getLocalStorage();
+
+    //handlers
     form.addEventListener('submit', this._newWorkout.bind(this));
 
     inputType.addEventListener('change', this._toggleElevationField.bind(this));
+    containerWorkouts.addEventListener('click', this._moveToPoup.bind(this));
   }
 
   _getPosition() {
@@ -82,27 +95,34 @@ class App {
   _loadMap(position) {
     // this = App;
     const { latitude, longitude } = position.coords;
-    console.log(latitude, longitude);
-    console.log(`https://www.google.com/maps/@${latitude},${longitude}`);
+    // console.log(latitude, longitude);
+    // console.log(`https://www.google.com/maps/@${latitude},${longitude}`);
     // console.log(this);
     // console.log(this);
-    this.#map = L.map('map').setView([latitude, longitude], 13);
+    this.#map = L.map('map').setView([latitude, longitude], this.#mapZoomLevel);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.#map);
 
-    L.marker([latitude, longitude])
-      .addTo(this.#map)
-      .bindPopup('A pretty CSS3 popup.<br> Easily customizable.')
-      .openPopup();
     this.#map.on('click', this._showForm.bind(this));
+    this.#workout.forEach(work => {
+      this._renderWorkoutMarker(work);
+    });
   }
   _showForm(mapE) {
     this.#mapEvent = mapE;
     form.classList.remove('hidden');
     inputDistance.focus();
+  }
+  _hideForm() {
+    inputDistance.value =
+      inputDuration.value =
+      inputCadence.value =
+      inputElevation.value =
+        '';
+    form.classList.add('hidden');
   }
   _toggleElevationField() {
     inputElevation.closest('.form__row').classList.toggle('form__row--hidden');
@@ -141,23 +161,24 @@ class App {
         return alert('Input have to be positive number');
       workout = new Cycling([lat, lng], distance, duration, elevation);
     }
+
     // Add new object to workout array
     this.#workout.push(workout);
-    console.log(workout);
+    // console.log(workout);
 
     // Render new object on map as marker
+    this._renderWorkoutMarker(workout, workout.type);
 
-    this._renderWorkoutMarker(workout, type);
+    // render workout on list
     this._renderWorkout(workout);
+
     // remove values
-    inputDistance.value =
-      inputDuration.value =
-      inputCadence.value =
-      inputElevation.value =
-        '';
-    form.classList.add('hidden');
+    this._hideForm();
+
+    // set local storage to all workouts
+    this._setLocalStorage();
   }
-  _renderWorkoutMarker(workout, type) {
+  _renderWorkoutMarker(workout) {
     L.marker(workout.coords)
       .addTo(this.#map)
       .bindPopup(
@@ -166,7 +187,7 @@ class App {
           minwidth: 100,
           autoClose: false,
           closeOnClick: false,
-          className: `${type}-popup`,
+          className: `${workout.type}-popup`,
         })
       )
       .setPopupContent(`${workout.description}`)
@@ -218,6 +239,38 @@ class App {
         `;
     }
     form.insertAdjacentHTML('afterend', html);
+  }
+  _moveToPoup(e) {
+    // console.log(e);
+    const workoutEl = e.target.closest('.workout');
+    if (!workoutEl) return;
+    // console.log(workoutEl);
+    const workout = this.#workout.find(
+      work => work.id === workoutEl.dataset.id
+    );
+    this.#map.setView(workout.coords, this.#mapZoomLevel, {
+      pananimate: true,
+      pan: {
+        duration: 1,
+      },
+    });
+    // workout.click();
+  }
+  _setLocalStorage() {
+    localStorage.setItem('workout', JSON.stringify(this.#workout));
+  }
+  _getLocalStorage() {
+    const data = JSON.parse(localStorage.getItem('workout'));
+    // console.log(data);
+    if (!data) return;
+    this.#workout = data;
+    this.#workout.forEach(work => {
+      this._renderWorkout(work);
+    });
+  }
+  reset() {
+    localStorage.removeItem('workout');
+    location.reload();
   }
 }
 
